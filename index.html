@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Songo</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div class="board-wrap">
+    <h1 class="game-title">Songo</h1>
+    <div class="scores">
+      <div class="score-card" id="sc1">
+        <div class="score-label">Joueur 1</div>
+        <div class="score-val" id="sv1">0</div>
+      </div>
+      <div class="score-card" id="sc2">
+        <div class="score-label">Joueur 2</div>
+        <div class="score-val" id="sv2">0</div>
+      </div>
+    </div>
+    <div class="player-row" id="p2row">
+      Joueur 2 <span id="p2hint"></span>
+    </div>
+    <div class="pits" id="top-row"></div>
+    <div class="separator"></div>
+    <div class="pits" id="bot-row"></div>
+    <div class="player-row" id="p1row">
+      Joueur 1 <span id="p1hint"></span>
+    </div>
+    <div class="msg" id="msg">Tour du Joueur 1</div>
+    <button class="restart-btn" onclick="initGame()">Nouvelle partie</button>
+  </div>
+  <script src="script.js"></script>
+</body>
+</html>
