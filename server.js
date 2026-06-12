@@ -5,11 +5,10 @@ const app  = express();
 const PORT = process.env.PORT || 3000;
 
 // ── Middleware ────────────────────────────────────────────────
-app.use(cors());
+app.use(cors({ origin: '*' }));
 app.use(express.json());
 
 // ── Stockage en mémoire ───────────────────────────────────────
-// rooms[code] = { ...gameState, updatedAt: Date }
 const rooms = {};
 
 // Nettoyage automatique : supprimer les salles inactives depuis +2h
@@ -18,9 +17,12 @@ setInterval(() => {
   for (const code in rooms) {
     if (rooms[code].updatedAt < limit) delete rooms[code];
   }
-}, 15 * 60 * 1000); // toutes les 15 min
+}, 15 * 60 * 1000);
 
 // ── Routes ───────────────────────────────────────────────────
+
+// Route racine
+app.get('/', (_req, res) => res.json({ status: 'ok', message: 'Songo backend opérationnel 🎮' }));
 
 // Créer une salle
 app.post('/rooms', (req, res) => {
@@ -53,9 +55,6 @@ app.delete('/rooms/:code', (req, res) => {
   delete rooms[req.params.code];
   res.json({ ok: true });
 });
-
-// Route racine
-app.get('/', (_req, res) => res.json({ status: 'ok', message: 'Songo backend opérationnel 🎮' }));
 
 // Health check
 app.get('/health', (_req, res) => res.json({ status: 'ok', rooms: Object.keys(rooms).length }));
