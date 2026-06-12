@@ -54,7 +54,10 @@ app.delete('/rooms/:code', (req, res) => {
   res.json({ ok: true });
 });
 
-// Health check (Render en a besoin)
+// Route racine
+app.get('/', (_req, res) => res.json({ status: 'ok', message: 'Songo backend opérationnel 🎮' }));
+
+// Health check
 app.get('/health', (_req, res) => res.json({ status: 'ok', rooms: Object.keys(rooms).length }));
 
 app.listen(PORT, () => console.log(`Songo backend démarré sur le port ${PORT}`));
