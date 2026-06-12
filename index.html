@@ -16,7 +16,6 @@
       <div class="home-subtitle">Jeu de semailles Ekang · Cameroun</div>
     </div>
 
-    <!-- Mini plateau décoratif -->
     <div class="home-board-preview">
       <div class="home-row">
         <div class="home-pit">5</div><div class="home-pit">5</div>
@@ -33,9 +32,56 @@
     </div>
 
     <div class="home-actions">
-      <button class="btn-primary"    onclick="startNewGame()">Nouvelle partie</button>
-      <button class="btn-secondary"  onclick="showPage('page-history')">Historique des parties</button>
+      <button class="btn-primary"   onclick="startNewGame()">Jouer en local</button>
+      <button class="btn-primary btn-online" onclick="showPage('page-online')">🌐 Jouer en ligne</button>
+      <button class="btn-secondary" onclick="showPage('page-history')">Historique des parties</button>
     </div>
+  </div>
+</div>
+
+<!-- =============== PAGE EN LIGNE =============== -->
+<div class="page" id="page-online">
+  <div class="hist-header">
+    <button class="back-btn" onclick="showPage('page-home')" title="Retour">←</button>
+    <span class="hist-title">Jouer en ligne</span>
+  </div>
+
+  <div class="online-wrap">
+
+    <!-- Créer une partie -->
+    <div class="online-card" id="online-create-card">
+      <div class="online-card-title">Créer une partie</div>
+      <div class="online-card-desc">Générez un code et partagez-le avec votre ami.</div>
+      <button class="btn-primary" onclick="createOnlineGame()">Créer une partie</button>
+    </div>
+
+    <div class="online-divider"><span>ou</span></div>
+
+    <!-- Rejoindre une partie -->
+    <div class="online-card">
+      <div class="online-card-title">Rejoindre une partie</div>
+      <div class="online-card-desc">Entrez le code reçu de votre ami.</div>
+      <div class="online-join-row">
+        <input class="online-input" id="join-code-input" type="text" maxlength="6"
+               placeholder="CODE" oninput="this.value=this.value.toUpperCase()"
+               onkeydown="if(event.key==='Enter') joinOnlineGame()" />
+        <button class="btn-primary btn-join" onclick="joinOnlineGame()">Rejoindre</button>
+      </div>
+      <div class="online-error" id="join-error"></div>
+    </div>
+
+    <!-- En attente (affiché après création) -->
+    <div class="online-waiting" id="online-waiting" style="display:none">
+      <div class="waiting-title">En attente de votre adversaire…</div>
+      <div class="waiting-code-label">Code de la partie :</div>
+      <div class="waiting-code" id="waiting-code-display">------</div>
+      <button class="btn-secondary btn-copy" onclick="copyRoomCode()">📋 Copier le code</button>
+      <div class="waiting-spinner">
+        <span class="dot"></span><span class="dot"></span><span class="dot"></span>
+      </div>
+      <button class="btn-secondary" style="margin-top:1rem" onclick="cancelOnlineGame()">Annuler</button>
+    </div>
+
   </div>
 </div>
 
@@ -54,15 +100,16 @@
   <div class="game-header">
     <button class="back-btn" onclick="confirmLeave()" title="Accueil">←</button>
     <span class="game-title">Songo</span>
+    <span class="online-badge" id="online-badge" style="display:none">🌐 En ligne</span>
   </div>
 
   <div class="scores">
     <div class="score-card" id="sc1">
-      <div class="score-label">Joueur 1</div>
+      <div class="score-label" id="sc1-label">Joueur 1</div>
       <div class="score-val" id="sv1">0</div>
     </div>
     <div class="score-card" id="sc2">
-      <div class="score-label">Joueur 2</div>
+      <div class="score-label" id="sc2-label">Joueur 2</div>
       <div class="score-val" id="sv2">0</div>
     </div>
   </div>
@@ -74,7 +121,7 @@
   <div class="player-row" id="p1row">Joueur 1 <span id="p1hint"></span></div>
 
   <div class="msg" id="msg">Tour du Joueur 1</div>
-  <button class="restart-btn" onclick="confirmRestart()">Nouvelle partie</button>
+  <button class="restart-btn" id="restart-btn" onclick="confirmRestart()">Nouvelle partie</button>
 </div>
 
 <!-- =============== MODALE FIN DE PARTIE =============== -->
@@ -86,7 +133,7 @@
     <div class="modal-scores-row"  id="modal-scores-row"></div>
     <div class="modal-reason"      id="modal-reason"></div>
     <div class="modal-actions">
-      <button class="btn-primary"   onclick="startNewGame()">Nouvelle partie</button>
+      <button class="btn-primary"   id="modal-new-btn"  onclick="startNewGame()">Nouvelle partie</button>
       <button class="btn-secondary" onclick="goHome()">Retour à l'accueil</button>
     </div>
   </div>
