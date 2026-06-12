@@ -1,141 +1,231 @@
-// ====================
+// =====================================================
+// NAVIGATION
+// =====================================================
+
+function showPage(id) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+  if (id === 'page-history') renderHistory();
+}
+
+function goHome() {
+  closeModal();
+  showPage('page-home');
+}
+
+function confirmLeave() {
+  if (!gameOver && totalSeeds() < 70) {
+    if (!confirm('Abandonner la partie en cours ?')) return;
+  }
+  showPage('page-home');
+}
+
+function confirmRestart() {
+  if (!gameOver && totalSeeds() < 70) {
+    if (!confirm('Abandonner la partie et en commencer une nouvelle ?')) return;
+  }
+  startNewGame();
+}
+
+function startNewGame() {
+  closeModal();
+  showPage('page-game');
+  initGame();
+}
+
+// =====================================================
+// HISTORIQUE (localStorage)
+// =====================================================
+
+function saveGame(result) {
+  const key = 'songo_history';
+  let hist = [];
+  try { hist = JSON.parse(localStorage.getItem(key)) || []; } catch(e) {}
+  hist.unshift(result);
+  if (hist.length > 50) hist = hist.slice(0, 50);
+  localStorage.setItem(key, JSON.stringify(hist));
+}
+
+function loadHistory() {
+  try { return JSON.parse(localStorage.getItem('songo_history')) || []; } catch(e) { return []; }
+}
+
+function clearHistory() {
+  if (confirm("Effacer tout l'historique ?")) {
+    localStorage.removeItem('songo_history');
+    renderHistory();
+  }
+}
+
+function renderHistory() {
+  const hist = loadHistory();
+  const countEl   = document.getElementById('hist-count');
+  const contentEl = document.getElementById('hist-content');
+
+  countEl.textContent = hist.length ? `${hist.length} partie${hist.length > 1 ? 's' : ''}` : '';
+
+  if (hist.length === 0) {
+    contentEl.innerHTML = '<div class="hist-empty">Aucune partie enregistrée.<br>Jouez votre première partie !</div>';
+    return;
+  }
+
+  let html = '<div class="hist-list">';
+  hist.forEach(g => {
+    const d       = new Date(g.date);
+    const dateStr = d.toLocaleDateString('fr-FR', { day:'2-digit', month:'short', year:'numeric', hour:'2-digit', minute:'2-digit' });
+
+    let boardHtml = '';
+    if (g.board) {
+      boardHtml = `
+        <div class="hist-board">
+          <div class="hist-board-rows">
+            <div class="hist-board-row">
+              <span class="hist-player-lbl">J2</span>
+              ${[13,12,11,10,9,8,7].map(i => `<div class="hist-pit-mini${g.board[i]===0?' empty':''}">${g.board[i]}</div>`).join('')}
+            </div>
+            <div class="hist-board-row">
+              <span class="hist-player-lbl">J1</span>
+              ${[0,1,2,3,4,5,6].map(i => `<div class="hist-pit-mini${g.board[i]===0?' empty':''}">${g.board[i]}</div>`).join('')}
+            </div>
+          </div>
+        </div>`;
+    }
+
+    html += `
+      <div class="hist-card">
+        <div class="hist-card-header">
+          <span class="hist-card-result">${g.result}</span>
+          <span class="hist-card-date">${dateStr}</span>
+        </div>
+        <div class="hist-card-scores">
+          <span>Joueur 1 : <strong>${g.scores[0]}</strong></span>
+          <span>Joueur 2 : <strong>${g.scores[1]}</strong></span>
+        </div>
+        ${g.reason ? `<div class="hist-card-reason">${g.reason}</div>` : ''}
+        ${boardHtml}
+      </div>`;
+  });
+  html += '</div>';
+  html += '<button class="hist-clear-btn" onclick="clearHistory()">Effacer l\'historique</button>';
+  contentEl.innerHTML = html;
+}
+
+// =====================================================
+// MODALE DE FIN DE PARTIE
+// =====================================================
+
+function openModal(resultData) {
+  const { winner, scores: sc, reason, isDraw } = resultData;
+
+  document.getElementById('modal-emoji').textContent = isDraw ? '🤝' : '🏆';
+  document.getElementById('modal-title').textContent = isDraw ? 'Match nul !' : `Joueur ${winner} gagne !`;
+  document.getElementById('modal-sub').textContent   = isDraw ? 'Les deux joueurs sont à égalité' : `Victoire du Joueur ${winner}`;
+
+  document.getElementById('modal-scores-row').innerHTML = `
+    <div class="modal-player-score">
+      <div class="lbl">Joueur 1</div>
+      <div class="val${winner === 1 ? ' winner' : ''}">${sc[0]}</div>
+    </div>
+    <div class="modal-sep">·</div>
+    <div class="modal-player-score">
+      <div class="lbl">Joueur 2</div>
+      <div class="val${winner === 2 ? ' winner' : ''}">${sc[1]}</div>
+    </div>`;
+
+  document.getElementById('modal-reason').textContent = reason || '';
+  document.getElementById('modal-overlay').classList.add('open');
+}
+
+function closeModal() {
+  document.getElementById('modal-overlay').classList.remove('open');
+}
+
+// Fermer la modale en cliquant sur le fond
+document.getElementById('modal-overlay').addEventListener('click', function(e) {
+  if (e.target === this) closeModal();
+});
+
+// =====================================================
 // ÉTAT DU JEU
-// ====================
+// =====================================================
 
 let board, currentPlayer, scores, lastPit, gameOver;
 
-// Joueur 1 : cases 0-6  (sème droite→gauche dans son camp = index décroissant, puis gauche→droite chez J2 = index croissant)
-// Joueur 2 : cases 7-13 (sème droite→gauche dans son camp = index décroissant dans 7-13, puis gauche→droite chez J1)
-//
-// Sens de semis unifié : on tourne toujours dans le sens 0→1→2→3→4→5→6→7→8→9→10→11→12→13→0
-// Pour J1 : son camp = 0-6, camp adverse = 7-13
-// Pour J2 : son camp = 7-13, camp adverse = 0-6
-//
-// ATTENTION : "de droite vers gauche dans son camp puis gauche vers droite chez l'adversaire"
-// correspond au sens de rotation : J1 sème 6→5→4→3→2→1→0→7→8→9→10→11→12→13→6...
-// soit la boucle DÉCROISSANTE dans son camp puis CROISSANTE chez l'adversaire.
-//
-// On représente ça par une séquence fixe :
-//   J1 : 6,5,4,3,2,1,0,7,8,9,10,11,12,13  (puis recommence à 6)
-//   J2 : 13,12,11,10,9,8,7,0,1,2,3,4,5,6  (puis recommence à 13)
-
-function playerRange(p) {
-  return p === 1 ? [0, 6] : [7, 13];
-}
-
-function opponentRange(p) {
-  return p === 1 ? [7, 13] : [0, 6];
-}
-
-// Séquence de semis : tableau de 14 indices dans l'ordre de distribution pour chaque joueur
-// J1 tourne : 6→5→4→3→2→1→0→7→8→9→10→11→12→13→6→...
-// J2 tourne : 13→12→11→10→9→8→7→0→1→2→3→4→5→6→13→...
+// Joueur 1 : cases 0-6   — sème 6→5→4→3→2→1→0→7→8→9→10→11→12→13
+// Joueur 2 : cases 7-13  — sème 13→12→11→10→9→8→7→0→1→2→3→4→5→6
 const SEQ = {
   1: [6, 5, 4, 3, 2, 1, 0, 7, 8, 9, 10, 11, 12, 13],
   2: [13, 12, 11, 10, 9, 8, 7, 0, 1, 2, 3, 4, 5, 6]
 };
 
-// Prochain index dans la séquence de semis d'un joueur, en partant d'un index donné
-function nextInSeq(p, idx) {
-  const seq = SEQ[p];
-  const pos = seq.indexOf(idx);
-  return seq[(pos + 1) % 14];
-}
+function playerRange(p)   { return p === 1 ? [0, 6]  : [7, 13]; }
+function opponentRange(p) { return p === 1 ? [7, 13] : [0, 6];  }
 
-// Position dans la séquence (0-based)
-function posInSeq(p, idx) {
-  return SEQ[p].indexOf(idx);
-}
-
-// ====================
-// INITIALISATION
-// ====================
-
-function initGame() {
-  board = Array(14).fill(5);
-  currentPlayer = 1;
-  scores = [0, 0];
-  lastPit = -1;
-  gameOver = false;
-
-  const msgEl = document.getElementById("msg");
-  msgEl.className = "msg";
-  msgEl.textContent = "Tour du Joueur 1";
-
-  render();
-}
-
-// ====================
-// UTILITAIRES
-// ====================
-
-function hasSeeds(p) {
-  const [s, e] = playerRange(p);
-  for (let i = s; i <= e; i++) {
-    if (board[i] > 0) return true;
-  }
-  return false;
-}
-
-function totalSeeds() {
-  return board.reduce((a, b) => a + b, 0);
-}
-
-// Indique si un index appartient au camp adverse du joueur p
 function isInOpponentCamp(p, idx) {
   const [os, oe] = opponentRange(p);
   return idx >= os && idx <= oe;
 }
 
-// ====================
+// =====================================================
+// INITIALISATION
+// =====================================================
+
+function initGame() {
+  board         = Array(14).fill(5);
+  currentPlayer = 1;
+  scores        = [0, 0];
+  lastPit       = -1;
+  gameOver      = false;
+
+  const msgEl   = document.getElementById('msg');
+  msgEl.className  = 'msg';
+  msgEl.textContent = 'Tour du Joueur 1';
+  render();
+}
+
+// =====================================================
+// UTILITAIRES
+// =====================================================
+
+function hasSeeds(p) {
+  const [s, e] = playerRange(p);
+  for (let i = s; i <= e; i++) if (board[i] > 0) return true;
+  return false;
+}
+
+function totalSeeds() { return board.reduce((a, b) => a + b, 0); }
+
+// =====================================================
 // SIMULATION D'UN COUP
-// (corrigée : tour complet géré correctement)
-// ====================
+// =====================================================
 
 function simulateMove(b, startIdx, p) {
-  let tmp = [...b];
+  let tmp  = [...b];
   let seeds = tmp[startIdx];
   tmp[startIdx] = 0;
 
-  const seq = SEQ[p];
-  const startPos = seq.indexOf(startIdx);
-  const totalLen = seq.length; // 14
+  const seq        = SEQ[p];
+  const oppStartPos = 7; // le camp adverse commence toujours à la position 7 dans SEQ
+  let opSeeds = 0, last = startIdx;
 
-  // Indices des cases du camp adverse dans la séquence
-  // Pour J1 : cases 7-13 sont aux positions 7-13 de la séquence
-  // Pour J2 : cases 0-6 sont aux positions 7-13 de la séquence
-  // Dans les deux cas, le camp adverse = positions 7 à 13 de SEQ[p]
-  const oppStartPos = 7; // position dans la séquence où commence le camp adverse
-  const [os, oe] = opponentRange(p);
-
-  let opSeeds = 0;
-  let cur = startIdx;
-  let last = startIdx;
-
-  const fullTours = Math.floor(seeds / 13); // nombre de tours complets (on saute la case de départ, donc 13 cases par tour)
+  const fullTours = Math.floor(seeds / 13);
   const remainder = seeds % 13;
 
   if (fullTours === 0) {
-    // Cas normal : moins de 14 graines, pas de tour complet
+    // Semis normal : on saute la case de départ si on y repasse
+    let cur = startIdx;
     for (let i = 0; i < seeds; i++) {
-      // Avancer d'une case dans la séquence, en sautant startIdx
       let nextPos = (seq.indexOf(cur) + 1) % 14;
-      while (seq[nextPos] === startIdx) {
-        nextPos = (nextPos + 1) % 14;
-      }
+      while (seq[nextPos] === startIdx) nextPos = (nextPos + 1) % 14;
       cur = seq[nextPos];
       tmp[cur]++;
       if (isInOpponentCamp(p, cur)) opSeeds++;
     }
     last = cur;
   } else {
-    // Tour(s) complet(s) : distribuer d'abord les tours complets (13 cases par tour, case départ sautée)
-    // Puis continuer UNIQUEMENT dans le camp adverse depuis sa première case (leftmost)
-    // "depuis la gauche jusqu'à épuisement des graines, quitte à la répéter depuis la gauche"
-
-    // Phase 1 : tours complets (on distribue dans les 13 cases ≠ startIdx)
-    const seqWithoutStart = [...seq.slice(0, seq.indexOf(startIdx)), ...seq.slice(seq.indexOf(startIdx) + 1)];
-    // seqWithoutStart contient 13 cases dans l'ordre de semis, sans la case de départ
+    // Tour(s) complet(s) : on distribue 13 cases par tour (sans la case de départ)
+    const startPos         = seq.indexOf(startIdx);
+    const seqWithoutStart  = [...seq.slice(0, startPos), ...seq.slice(startPos + 1)];
 
     for (let t = 0; t < fullTours; t++) {
       for (let i = 0; i < 13; i++) {
@@ -144,25 +234,14 @@ function simulateMove(b, startIdx, p) {
       }
     }
 
-    // Phase 2 : distribution du reste UNIQUEMENT dans le camp adverse, depuis la gauche
-    // Camp adverse dans l'ordre de semis = positions oppStartPos à 13 de SEQ[p]
-    const oppSeq = seq.slice(oppStartPos); // 7 cases adverses dans l'ordre de semis
-
-    let rem = remainder;
-    let oppIdx = 0;
+    // Puis le reste UNIQUEMENT dans le camp adverse, depuis sa première case
+    const oppSeq = seq.slice(oppStartPos); // 7 cases adverses dans l'ordre
+    let rem = remainder, oppIdx = 0;
     while (rem > 0) {
       const idx = oppSeq[oppIdx % oppSeq.length];
-      tmp[idx]++;
-      opSeeds++;
-      last = idx;
-      rem--;
-      oppIdx++;
+      tmp[idx]++; opSeeds++; last = idx; rem--; oppIdx++;
     }
-
-    if (remainder === 0) {
-      // Toutes les graines sont tombées dans le tour complet, la dernière est seqWithoutStart[12]
-      last = seqWithoutStart[seqWithoutStart.length - 1];
-    }
+    if (remainder === 0) last = seqWithoutStart[seqWithoutStart.length - 1];
   }
 
   return { board: tmp, last, opSeeds, fullTour: fullTours > 0 };
@@ -170,37 +249,29 @@ function simulateMove(b, startIdx, p) {
 
 function getMoves(p) {
   const [s, e] = playerRange(p);
-  let moves = [];
-
-  for (let i = s; i <= e; i++) {
-    if (board[i] > 0) {
+  return Array.from({ length: e - s + 1 }, (_, k) => s + k)
+    .filter(i => board[i] > 0)
+    .map(i => {
       const r = simulateMove(board, i, p);
-      moves.push({ idx: i, seeds: board[i], opSeeds: r.opSeeds, sim: r });
-    }
-  }
-
-  return moves;
+      return { idx: i, seeds: board[i], opSeeds: r.opSeeds, sim: r };
+    });
 }
 
-// ====================
-// RÈGLE : INTERDIT case 7 du joueur (sa dernière case côté frontière)
-// Case 7 de J1 = index 6 (sa 7e case, cases 0→6)
-// Case 7 de J2 = index 13 (sa 7e case, cases 7→13)
-// ====================
+// =====================================================
+// RÈGLES SPÉCIALES
+// =====================================================
 
-function frontierIndex(p) {
-  return p === 1 ? 6 : 13;
-}
+// Case frontière (case 7) :
+//   J1 → index 6  (7e case de J1, côté droit de son camp)
+//   J2 → index 13 (7e case de J2, côté gauche de son camp)
+function frontierIndex(p) { return p === 1 ? 6 : 13; }
 
 function isForbidden(idx, p) {
   if (idx !== frontierIndex(p)) return false;
   return board[idx] === 1 || board[idx] === 2;
 }
 
-// ====================
-// RÈGLE DE SOLIDARITÉ
-// ====================
-
+// Solidarité : si le camp adverse est vide, on doit envoyer ≥7 graines
 function solidarityCheck(p) {
   const opp = 3 - p;
   if (hasSeeds(opp)) return { forced: null, end: false, strict: false };
@@ -209,165 +280,105 @@ function solidarityCheck(p) {
   if (moves.length === 0) return { forced: null, end: true };
 
   const valid = moves.filter(m => m.opSeeds >= 7 && !isForbidden(m.idx, p));
-  if (valid.length > 0) {
-    return { forced: valid.map(m => m.idx), end: false, strict: false };
-  }
+  if (valid.length > 0) return { forced: valid.map(m => m.idx), end: false, strict: false };
 
-  // Aucun coup n'atteint 7 graines : on prend le meilleur
   const best = moves.reduce((a, b) => a.opSeeds > b.opSeeds ? a : b);
   return { forced: [best.idx], end: false, strict: true };
 }
 
-// ====================
-// CAPTURES
-// (corrigée : sens de chaîne selon le joueur, case spéciale correcte)
-//
-// Règle :
-// - Prise si dernière graine tombe chez l'adversaire dans une case contenant 1 à 3 graines
-//   (la graine vient d'être déposée, donc on a 2 à 4 au total)
-// - Pas de prise dans la case n°1 adverse (la plus à gauche du joueur adverse)
-//   SAUF si elle est incluse dans une chaîne ou si tour complet (≥14 graines)
-// - Prise à la chaîne : cases précédentes (dans le sens opposé au semis) avec 2 à 4 graines
-// - Interdit de vider entièrement le camp adverse
-//
-// Case n°1 adverse (celle la plus à GAUCHE du point de vue du joueur adverse) :
-//   Pour J1 (sème 7→8→...→13 chez l'adversaire) : la case la plus à gauche du camp adverse = 7
-//   Pour J2 (sème 6→5→...→0 chez l'adversaire) : la case la plus à gauche du camp adverse = 0
-//
-// Sens de la chaîne (on remonte en sens inverse du semis chez l'adversaire) :
-//   Pour J1 dans camp adverse (7→8→...→13) : on remonte 13→12→...→7 donc cur--
-//   Pour J2 dans camp adverse (6→5→...→0) : on remonte 0→1→...→6 donc cur++
-// ====================
+// Case n°1 adverse (première case du camp adverse dans le sens du semis) :
+//   J1 sème en croissant dans le camp adverse (7→13) → première = 7
+//   J2 sème en décroissant dans le camp adverse (6→0) → première = 6
+function specialIndex(p) { return p === 1 ? 7 : 6; }
 
-function specialIndex(p) {
-  // Case n°1 adverse = première case distribuée chez l'adversaire
-  // J1 : 7 (première case adverse dans la séquence J1)
-  // J2 : 6 (première case adverse dans la séquence J2)
-  return p === 1 ? 7 : 6;
-}
+// =====================================================
+// CAPTURES
+// =====================================================
 
 function doCapture(b, lastIdx, p, seedsPlayed) {
   const [os, oe] = opponentRange(p);
-  const specIdx = specialIndex(p);
+  const specIdx  = specialIndex(p);
   let tmp = [...b];
   let captured = 0;
 
-  // Pas dans le camp adverse = pas de capture
-  if (!isInOpponentCamp(p, lastIdx)) {
-    return { board: tmp, captured: 0 };
-  }
+  if (!isInOpponentCamp(p, lastIdx)) return { board: tmp, captured: 0 };
+  if (!tmp.slice(os, oe + 1).some(v => v > 0)) return { board: tmp, captured: 0 };
 
-  // Pas de capture si camp adverse vide (au moment de la prise)
-  if (!tmp.slice(os, oe + 1).some(v => v > 0)) {
-    return { board: tmp, captured: 0 };
-  }
-
-  // Cas spécial : tour complet ET dernière graine sur la case spéciale → 1 seule graine prise
+  // Tour complet + dernière graine sur la case spéciale → 1 seule graine
   if (lastIdx === specIdx && seedsPlayed >= 14) {
     const testBoard = [...tmp];
     testBoard[lastIdx] = 0;
-    const oppStillHasSeeds = testBoard.slice(os, oe + 1).some(v => v > 0);
-    if (oppStillHasSeeds) {
+    if (testBoard.slice(os, oe + 1).some(v => v > 0)) {
       tmp[lastIdx] = 0;
       return { board: tmp, captured: 1, special: true };
     }
     return { board: tmp, captured: 0 };
   }
 
-  // La case spéciale ne peut pas être la PREMIÈRE case capturée
-  // (elle peut être incluse dans une chaîne)
-  if (lastIdx === specIdx) {
-    return { board: tmp, captured: 0 };
-  }
+  // La case spéciale ne peut pas être la première capturée
+  if (lastIdx === specIdx) return { board: tmp, captured: 0 };
 
-  // Prise normale + chaîne
-  // On remonte dans le sens inverse du semis chez l'adversaire :
-  //   J1 sème chez l'adversaire en croissant (7→13), on remonte en décroissant (cur--)
-  //   J2 sème chez l'adversaire en décroissant (6→0), on remonte en croissant (cur++)
+  // Prise normale + chaîne (on remonte dans le sens inverse du semis)
+  // J1 sème en croissant (7→13) → on remonte en décroissant (step = -1)
+  // J2 sème en décroissant (6→0) → on remonte en croissant  (step = +1)
   const step = p === 1 ? -1 : 1;
-  let cur = lastIdx;
-  let isChain = false;
+  let cur = lastIdx, isChain = false;
 
   while (true) {
-    // Hors du camp adverse : arrêt
     if (!isInOpponentCamp(p, cur)) break;
-
     const count = tmp[cur];
-
-    // Case spéciale : ne peut pas être la première capturée, mais peut être dans une chaîne
     if (cur === specIdx && !isChain) break;
-
-    // Prise si 2 à 4 graines (la graine vient d'être déposée, count inclut déjà la dernière graine)
     if (count >= 2 && count <= 4) {
-      // Vérifier que la capture ne viderait pas entièrement le camp adverse
       const testBoard = [...tmp];
       testBoard[cur] = 0;
-      const oppStillHasSeeds = testBoard.slice(os, oe + 1).some(v => v > 0);
-      if (!oppStillHasSeeds) break;
-
+      if (!testBoard.slice(os, oe + 1).some(v => v > 0)) break; // ne pas vider le camp
       captured += count;
       tmp[cur] = 0;
-      cur += step; // remonter dans le sens inverse du semis
+      cur += step;
       isChain = true;
-    } else {
-      break;
-    }
+    } else break;
   }
 
   return { board: tmp, captured };
 }
 
-// ====================
+// =====================================================
 // CLIC SUR UNE CASE
-// ====================
+// =====================================================
 
 function handleClick(idx) {
   if (gameOver) return;
 
   const [s, e] = playerRange(currentPlayer);
-  if (idx < s || idx > e) {
-    showMsg("Ce n'est pas votre camp.", "error");
-    return;
-  }
-
-  if (board[idx] === 0) {
-    showMsg("Cette case est vide.", "error");
-    return;
-  }
+  if (idx < s || idx > e)  { showMsg("Ce n'est pas votre camp.", 'error'); return; }
+  if (board[idx] === 0)    { showMsg('Cette case est vide.', 'error'); return; }
 
   const sol = solidarityCheck(currentPlayer);
+  if (sol.end) { endGame('Fin de partie : solidarité impossible.'); return; }
 
-  if (sol.end) {
-    endGame("Fin de partie : solidarité impossible.");
-    return;
-  }
-
-  // Solidarité : coup forcé parmi une liste de cases valides
   if (sol.forced && !sol.forced.includes(idx)) {
-    showMsg("⚠ Coup de solidarité requis — choisissez une autre case.", "error");
+    showMsg('⚠ Coup de solidarité requis — choisissez une autre case.', 'error');
     return;
   }
 
-  // Coup interdit (1-2 graines depuis la case frontière)
   if (isForbidden(idx, currentPlayer)) {
     if (sol.strict && sol.forced && sol.forced.includes(idx)) {
-      // Seul coup possible mais interdit → graines à l'adversaire
       const opp = 3 - currentPlayer;
       scores[opp - 1] += board[idx];
       board[idx] = 0;
-      showMsg("⚠ Coup interdit forcé : graines données à l'adversaire.", "error");
+      showMsg("⚠ Coup interdit forcé : graines données à l'adversaire.", 'error');
       updateScoreDisplay();
       nextTurn();
       return;
     }
-    showMsg("❌ Interdit : 1 ou 2 graines depuis la case frontière.", "error");
+    showMsg('❌ Interdit : 1 ou 2 graines depuis la case frontière.', 'error');
     return;
   }
 
-  // --- Coup valide ---
+  // Coup valide
   const seedsPlayed = board[idx];
   const sim = simulateMove(board, idx, currentPlayer);
-  board = sim.board;
+  board   = sim.board;
   lastPit = sim.last;
 
   const capResult = doCapture(board, sim.last, currentPlayer, seedsPlayed);
@@ -375,148 +386,139 @@ function handleClick(idx) {
 
   if (capResult.captured > 0) {
     scores[currentPlayer - 1] += capResult.captured;
-    const s2 = capResult.captured > 1 ? "s" : "";
-    showMsg(`+${capResult.captured} graine${s2} capturée${s2}`, "capture");
+    const pl = capResult.captured > 1 ? 's' : '';
+    showMsg(`+${capResult.captured} graine${pl} capturée${pl}`, 'capture');
   } else {
-    showMsg("");
+    showMsg('');
   }
 
   updateScoreDisplay();
 
-  // Victoire immédiate si ≥ 40 graines
   if (scores[currentPlayer - 1] >= 40) {
-    endGame(`Joueur ${currentPlayer} gagne !`, true);
+    endGame(`Joueur ${currentPlayer} gagne !`, true, '40 graines atteintes');
     return;
   }
-
-  // Fin si moins de 10 graines au total
-  if (totalSeeds() < 10) {
-    giveRemainingSeeds();
-    return;
-  }
+  if (totalSeeds() < 10) { giveRemainingSeeds(); return; }
 
   nextTurn();
 }
 
-// ====================
-// PASSAGE AU TOUR SUIVANT
-// ====================
+// =====================================================
+// TOUR SUIVANT
+// =====================================================
 
 function nextTurn() {
   currentPlayer = 3 - currentPlayer;
 
   const sol = solidarityCheck(currentPlayer);
-  if (sol.end) {
-    endGame("Fin de partie : solidarité impossible.");
-    return;
-  }
-
-  if (!hasSeeds(currentPlayer)) {
-    endGame(`Joueur ${currentPlayer} ne peut plus jouer.`);
-    return;
-  }
+  if (sol.end)             { endGame('Fin de partie : solidarité impossible.', false, 'Solidarité impossible'); return; }
+  if (!hasSeeds(currentPlayer)) { endGame(`Joueur ${currentPlayer} ne peut plus jouer.`, false, 'Camp vide'); return; }
 
   render();
-
-  if (!document.getElementById("msg").textContent) {
-    showMsg(`Tour du Joueur ${currentPlayer}`);
-  }
+  if (!document.getElementById('msg').textContent) showMsg(`Tour du Joueur ${currentPlayer}`);
 }
 
-// ====================
+// =====================================================
 // FIN DE PARTIE
-// ====================
+// =====================================================
 
 function giveRemainingSeeds() {
-  for (let i = 0; i <= 6; i++) { scores[0] += board[i]; board[i] = 0; }
+  for (let i = 0; i <= 6;  i++) { scores[0] += board[i]; board[i] = 0; }
   for (let i = 7; i <= 13; i++) { scores[1] += board[i]; board[i] = 0; }
   updateScoreDisplay();
   render();
 
-  if (scores[0] >= 40) { endGame("Joueur 1 gagne !", true); return; }
-  if (scores[1] >= 40) { endGame("Joueur 2 gagne !", true); return; }
-  if (scores[0] === scores[1]) { endGame("Match nul !"); return; }
-  endGame(`Joueur ${scores[0] > scores[1] ? 1 : 2} gagne !`, true);
+  if (scores[0] >= 40)            { endGame('Joueur 1 gagne !', true, 'Moins de 10 graines au total'); return; }
+  if (scores[1] >= 40)            { endGame('Joueur 2 gagne !', true, 'Moins de 10 graines au total'); return; }
+  if (scores[0] === scores[1])    { endGame('Match nul !', false, 'Moins de 10 graines — égalité', true); return; }
+  endGame(`Joueur ${scores[0] > scores[1] ? 1 : 2} gagne !`, true, 'Moins de 10 graines au total');
 }
 
-function endGame(msg, isWin) {
+function endGame(msg, isWin, reason, isDraw) {
   gameOver = true;
-  showMsg(msg, isWin ? "win" : "");
+  showMsg(msg, isWin ? 'win' : '');
   render();
+
+  let winner = null;
+  if (!isDraw) winner = scores[0] > scores[1] ? 1 : 2;
+
+  const resultData = {
+    date:   new Date().toISOString(),
+    result: isDraw ? 'Match nul' : `Joueur ${winner} gagne`,
+    winner,
+    scores: [...scores],
+    board:  [...board],
+    reason: reason || msg,
+    isDraw: !!isDraw
+  };
+
+  saveGame(resultData);
+  setTimeout(() => openModal(resultData), 350);
 }
 
-// ====================
+// =====================================================
 // AFFICHAGE
-// ====================
+// =====================================================
 
 function showMsg(text, cls) {
-  const el = document.getElementById("msg");
-  el.className = "msg" + (cls ? " " + cls : "");
+  const el = document.getElementById('msg');
+  el.className  = 'msg' + (cls ? ' ' + cls : '');
   el.textContent = text;
 }
 
 function updateScoreDisplay() {
-  document.getElementById("sv1").textContent = scores[0];
-  document.getElementById("sv2").textContent = scores[1];
+  document.getElementById('sv1').textContent = scores[0];
+  document.getElementById('sv2').textContent = scores[1];
 }
 
 function render() {
-  const topRow = document.getElementById("top-row");
-  const botRow = document.getElementById("bot-row");
-  topRow.innerHTML = "";
-  botRow.innerHTML = "";
-
+  const topRow = document.getElementById('top-row');
+  const botRow = document.getElementById('bot-row');
+  topRow.innerHTML = '';
+  botRow.innerHTML = '';
   updateScoreDisplay();
 
-  document.getElementById("p1row").className =
-    "player-row" + (currentPlayer === 1 ? " active" : "");
-  document.getElementById("p2row").className =
-    "player-row" + (currentPlayer === 2 ? " active" : "");
+  document.getElementById('p1row').className = 'player-row' + (currentPlayer === 1 ? ' active' : '');
+  document.getElementById('p2row').className = 'player-row' + (currentPlayer === 2 ? ' active' : '');
 
-  // Rangée du haut : joueur 2 (cases 13 → 7, affichées de gauche à droite)
   for (let i = 13; i >= 7; i--) topRow.appendChild(makePit(i, 2));
-
-  // Rangée du bas : joueur 1 (cases 0 → 6)
-  for (let i = 0; i <= 6; i++) botRow.appendChild(makePit(i, 1));
+  for (let i = 0;  i <= 6; i++) botRow.appendChild(makePit(i, 1));
 }
 
 function makePit(idx, owner) {
-  const div = document.createElement("div");
-  div.className = "pit";
+  const div = document.createElement('div');
+  div.className = 'pit';
 
-  if (board[idx] === 0) div.classList.add("empty");
-  if (gameOver) div.classList.add("disabled");
-  if (idx === lastPit && !gameOver) div.classList.add("last-pit");
+  if (board[idx] === 0) div.classList.add('empty');
+  if (gameOver)         div.classList.add('disabled');
+  if (idx === lastPit && !gameOver) div.classList.add('last-pit');
 
   const isActivePlayer = currentPlayer === owner;
-  if (isActivePlayer && !gameOver) div.classList.add("active-player");
+  if (isActivePlayer && !gameOver) div.classList.add('active-player');
 
-  // Numéro de case (1 à 7 pour chaque joueur)
-  // J1 : index 0 = C1, index 6 = C7
-  // J2 : index 13 = C1, index 7 = C7
-  const label = document.createElement("span");
-  label.className = "pit-label";
+  const label = document.createElement('span');
+  label.className  = 'pit-label';
+  // J1 : index 0 = C1 … index 6 = C7
+  // J2 : index 13 = C1 … index 7 = C7
   label.textContent = idx <= 6 ? `C${idx + 1}` : `C${14 - idx}`;
 
   div.textContent = board[idx];
   div.appendChild(label);
 
   if (isActivePlayer && board[idx] > 0 && !gameOver) {
-    div.addEventListener("click", () => handleClick(idx));
+    div.addEventListener('click', () => handleClick(idx));
   } else {
-    div.classList.add("disabled");
+    div.classList.add('disabled');
   }
 
-  // Marquer visuellement la case frontière (case 7 du joueur)
-  if (idx === frontierIndex(owner)) {
-    div.classList.add("frontier");
-  }
+  if (idx === frontierIndex(owner)) div.classList.add('frontier');
 
   return div;
 }
 
-// ====================
+// =====================================================
 // DÉMARRAGE
-// ====================
+// =====================================================
 
-initGame();
+// La page d'accueil est affichée par défaut (class="page active" dans le HTML)
+// Le jeu sera initialisé au clic sur "Nouvelle partie"

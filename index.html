@@ -7,30 +7,91 @@
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
-  <div class="board-wrap">
-    <h1 class="game-title">Songo</h1>
-    <div class="scores">
-      <div class="score-card" id="sc1">
-        <div class="score-label">Joueur 1</div>
-        <div class="score-val" id="sv1">0</div>
+
+<!-- =============== PAGE ACCUEIL =============== -->
+<div class="page active" id="page-home">
+  <div class="home-wrap">
+    <div>
+      <div class="home-title">Songo</div>
+      <div class="home-subtitle">Jeu de semailles Ekang · Cameroun</div>
+    </div>
+
+    <!-- Mini plateau décoratif -->
+    <div class="home-board-preview">
+      <div class="home-row">
+        <div class="home-pit">5</div><div class="home-pit">5</div>
+        <div class="home-pit">5</div><div class="home-pit">5</div>
+        <div class="home-pit">5</div><div class="home-pit">5</div>
+        <div class="home-pit">5</div>
       </div>
-      <div class="score-card" id="sc2">
-        <div class="score-label">Joueur 2</div>
-        <div class="score-val" id="sv2">0</div>
+      <div class="home-row">
+        <div class="home-pit">5</div><div class="home-pit">5</div>
+        <div class="home-pit">5</div><div class="home-pit">5</div>
+        <div class="home-pit">5</div><div class="home-pit">5</div>
+        <div class="home-pit">5</div>
       </div>
     </div>
-    <div class="player-row" id="p2row">
-      Joueur 2 <span id="p2hint"></span>
+
+    <div class="home-actions">
+      <button class="btn-primary"    onclick="startNewGame()">Nouvelle partie</button>
+      <button class="btn-secondary"  onclick="showPage('page-history')">Historique des parties</button>
     </div>
-    <div class="pits" id="top-row"></div>
-    <div class="separator"></div>
-    <div class="pits" id="bot-row"></div>
-    <div class="player-row" id="p1row">
-      Joueur 1 <span id="p1hint"></span>
-    </div>
-    <div class="msg" id="msg">Tour du Joueur 1</div>
-    <button class="restart-btn" onclick="initGame()">Nouvelle partie</button>
   </div>
-  <script src="script.js"></script>
+</div>
+
+<!-- =============== PAGE HISTORIQUE =============== -->
+<div class="page" id="page-history">
+  <div class="hist-header">
+    <button class="back-btn" onclick="showPage('page-home')" title="Retour">←</button>
+    <span class="hist-title">Historique</span>
+    <span class="hist-count" id="hist-count"></span>
+  </div>
+  <div id="hist-content"></div>
+</div>
+
+<!-- =============== PAGE JEU =============== -->
+<div class="page" id="page-game">
+  <div class="game-header">
+    <button class="back-btn" onclick="confirmLeave()" title="Accueil">←</button>
+    <span class="game-title">Songo</span>
+  </div>
+
+  <div class="scores">
+    <div class="score-card" id="sc1">
+      <div class="score-label">Joueur 1</div>
+      <div class="score-val" id="sv1">0</div>
+    </div>
+    <div class="score-card" id="sc2">
+      <div class="score-label">Joueur 2</div>
+      <div class="score-val" id="sv2">0</div>
+    </div>
+  </div>
+
+  <div class="player-row" id="p2row">Joueur 2 <span id="p2hint"></span></div>
+  <div class="pits" id="top-row"></div>
+  <div class="separator"></div>
+  <div class="pits" id="bot-row"></div>
+  <div class="player-row" id="p1row">Joueur 1 <span id="p1hint"></span></div>
+
+  <div class="msg" id="msg">Tour du Joueur 1</div>
+  <button class="restart-btn" onclick="confirmRestart()">Nouvelle partie</button>
+</div>
+
+<!-- =============== MODALE FIN DE PARTIE =============== -->
+<div class="modal-overlay" id="modal-overlay">
+  <div class="modal">
+    <div class="modal-emoji"       id="modal-emoji">🏆</div>
+    <div class="modal-title"       id="modal-title">Joueur 1 gagne !</div>
+    <div class="modal-sub"         id="modal-sub">Score final</div>
+    <div class="modal-scores-row"  id="modal-scores-row"></div>
+    <div class="modal-reason"      id="modal-reason"></div>
+    <div class="modal-actions">
+      <button class="btn-primary"   onclick="startNewGame()">Nouvelle partie</button>
+      <button class="btn-secondary" onclick="goHome()">Retour à l'accueil</button>
+    </div>
+  </div>
+</div>
+
+<script src="script.js"></script>
 </body>
 </html>
