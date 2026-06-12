@@ -3,7 +3,7 @@
 // =====================================================
 // Remplacez cette URL par l'URL de votre Web Service Render
 // ex : https://songo-backend.onrender.com
-const API_URL = 'https://VOTRE-SERVICE.onrender.com';
+const API_URL = 'https://songo-sur-meme-site1-0.onrender.com';
 
 // =====================================================
 // ÉTAT EN LIGNE
